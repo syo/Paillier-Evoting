@@ -19,18 +19,12 @@ class EB:
             print "Choice " + str(i) + " received " + str(results[i]) + " votes "
     def is_registered(self, voter_id):
         return voter_id in self.reg_voters
-    def send_vote(self, voter, vote, b):
-        b.set_row(voter, [ p.encrypt(self.public, v) for v in vote ])
 
 class BB:
     def __init__(self, n, m):
         self.table = [ [ x for x in range(0, m) ] for y in range (0, n) ]
         self.has_voted = []
         self.votes = []
-    def get_row(self, i):
-        return self.table[i]
-    def get_column(self, i):
-        return [ self.table[x][i] for x in range(len(self.table)) ]
     def get_votes(self):
         return self.votes
     def receive_vote(self, v):
@@ -52,7 +46,7 @@ def encrypted_arr_add(pub,list1,list2):
         list3[i] = p.e_add(pub,list1[i],list2[i])
     return list3
 
-def __main__():
+def main():
     e = EB([0,1,2,3,4]) #initialize EB, BB, CA
     b = BB(10, 5)
     c = CA()
@@ -61,10 +55,11 @@ def __main__():
     tcp_port = 5005
     buffer_size = 1024
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(tcp_ip,tcp_port)
+    s.bind((tcp_ip,tcp_port))
 
     tmp = 0
     while(tmp < 10): #need a better loop condition
+        print "listening " + str(tmp)
         s.listen(1)
         conn, addr = s.accept() # accept a voting client connection
         voter_id = conn.recv(buffer_size) # receive the voter's id
@@ -73,17 +68,30 @@ def __main__():
                 # encrypt with own key
                 # send to the EB
         vote_array = conn.recv(buffer_size) # get a vote array from a voter
-        if (!(e.is_registered(voter_id))): # if the voter isn't registered...
+        if not (e.is_registered(voter_id)): # if the voter isn't registered...
             conn.send("ERROR: UNREGISTERED VOTER\n")
             conn.close()
             continue # go back to listening
         vote_array.append("verifiedxxxxx") # tack the verification token onto the end of the vote array
         conn.send(vote_array) # send it back to the client so they can unwrap their layer and pass it to the BB
         bb_array = conn.recv(buffer_size) # bb receives the array from the client
-        if (!(b.receive_vote(bb_array))): #ignore duplicate votes
+        if not (b.receive_vote(bb_array)): #ignore duplicate votes
             conn.send("ERROR: DUPLICATE VOTE\n")
             conn.close()
             continue # go back to listening
         tmp += 1
 
     c.get_sum(b.get_votes(),e.get_public())
+
+"""
+TODO:
+Deal with registration/candidate selection and init stuff for BB/EB/CA
+Create the voting client and everything it does
+Zero Knowledge Proof stuff
+Figure out how we wanna do the voting period
+
+bug test
+"""
+
+if __name__ == "__main__":
+    main()
