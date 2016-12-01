@@ -19,10 +19,17 @@ class EB:
 class BB:
     def __init__(self, n, m):
         self.table = [ [ x for x in range(0, m) ] for y in range (0, n) ]
+        self.has_voted = []
+        self.votes = []
     def get_row(self, i):
         return self.table[i]
     def get_column(self, i):
         return [ self.table[x][i] for x in range(len(self.table)) ]
+    def receive_vote(self, v):
+        if (v[len(v)-1] in self.has_voted): # if you have already received this persons vote...
+            return False # exit out
+        self.has_voted.append(v[len(v)-1])
+        self.votes.append(v[:-1])
 
 class CA:
     def get_sum(self, list):
@@ -53,6 +60,9 @@ def __main__():
             conn.close()
             break
         vote_array.append("verifiedxxxxx") # tack the verification token onto the end of the vote array
+        conn.send(vote_array) # send it back to the client so they can unwrap their layer and pass it to the BB
+        bb_array = conn.recv(buffer_size) # bb receives the array from the client
+        #zero knowledge proof stuff goes here
         #wait for response, break if vote denied
         #decrypt response with own key
         #send to BB and do zero knowledge proof stuff
