@@ -9,17 +9,26 @@ import paillier
 import paillier.paillier as p
 import rsa
 import json
+import pickle
 from pprint import pprint
 
 class EB:
-    def __init__(self, reg_list):
-        self.public = pickle.load("keyserver/Public/EB_paillier_public.key")
-        self.private = pickle.load("keyserver/Private/EB_paillier.key")
+    def __init__(self, voters, canidates):
 
-        self.publicRSA = pickle.load("keyserver/Public/EB_RSA_public.key")
-        self.privateRSA = pickle.load("keyserver/Private/EB_RSA.key")
+        private_keyfile = open("keyserver/Private/EB_paillier.key", 'r')
+        public_keyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
 
-        self.reg_voters = reg_list # list of ids for registered voters
+        self.public = pickle.load(private_keyfile)
+        self.private = pickle.load(public_keyfile)
+
+        RSA_private_keyfile = open("keyserver/Private/EB_RSA.key", 'r')
+        RSA_public_keyfile = open("keyserver/Public/EB_RSA_public.key", 'r')
+
+        self.publicRSA = pickle.load(RSA_private_keyfile)
+        self.privateRSA = pickle.load(RSA_public_keyfile)
+
+        self.reg_voters = voters # list of ids for registered voters
+        self.canidates = canidates
     def get_public(self): # func to get the public key
         return self.public
     def arr_decrypt(self, vlist):
@@ -38,8 +47,12 @@ class BB:
         self.table = [ [ 0 for _ in range(0, n_canidates) ] for _ in range (0, n_voters) ]
         self.has_voted = []
         self.votes = []
-        self.publicRSA = pickle.load("keyserver/Public/BB_RSA_public.key")
-        self.privateRSA = pickle.load("keyserver/Private/BB_RSA.key")
+
+        RSA_private_keyfile = open("keyserver/Private/EB_RSA.key", 'r')
+        RSA_public_keyfile = open("keyserver/Public/EB_RSA_public.key", 'r')
+
+        self.publicRSA = pickle.load(RSA_private_keyfile)
+        self.privateRSA = pickle.load(RSA_public_keyfile)
     def get_votes(self):
         return self.votes
     def receive_vote(self, v):
@@ -57,9 +70,18 @@ class CA:
 
 class Election:
     def __init__(self,voters,canidates):
-        self.eb = EB(voters) #initialize EB, BB, CA
+        self.eb = EB(voters, canidates) #initialize EB, BB, CA
         self.bb = BB(len(voters), len(canidates))
         self.ca = CA()
+        self.canidates = canidates
+
+    def get_canidates(self):
+        return self.canidates
+
+    def get_response(self,message):
+        m = json.loads(message)
+        if m["TYPE"] == "REQUEST CANIDATES":
+            return json.dumps({"DATA":self.get_canidates()})
 
     def handle(self,fd):
         print("client connected")
@@ -68,7 +90,8 @@ class Election:
             x = fd.readline()
             if not x:
                 break
-            fd.write(x)
+            res = self.get_response(x)
+            fd.write(res+"\n")
             fd.flush()
             print("echoed", x, end=' ')
         print("client disconnected")
@@ -133,7 +156,7 @@ def main():
     #         continue # go back to listening
     #     tmp += 1
 
-    c.get_sum(b.get_votes(),e.get_public())
+    # c.get_sum(b.get_votes(),e.get_public())
 
 """
 TODO:

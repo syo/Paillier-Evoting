@@ -18,6 +18,7 @@ if (res == "1"): #EB_paillier
     pickle.dump(priv,private_keyfile)
     pickle.dump(pub,public_keyfile)
 
+
 if (res == "2"): #EB_RSA
     print "Generating keypair..."
     (priv, pub) = rsa.newkeys(1024)
@@ -39,3 +40,6 @@ if (res == "3"): #EB_RSA
 
     pickle.dump(priv,private_keyfile)
     pickle.dump(pub,public_keyfile)
+
+private_keyfile.close()
+public_keyfile.close()
