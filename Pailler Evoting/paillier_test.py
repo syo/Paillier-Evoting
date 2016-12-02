@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 
-from paillier.paillier import paillier as p
+import paillier
+import paillier.paillier as p
 
 
 
 has_voted = [] #store people who have voted in an array
 
 print "Generating keypair..."
-priv, pub = p.generate_keypair(512) #generate public and private keys
+priv, pub = p.generate_keypair(1024) #generate public and private keys
 #public key gets given to voters to encrypt their votes
 
 csum = p.encrypt(pub, 0) #store the encrypted sum of all votes, turn this into an array with slots for each candidate later
