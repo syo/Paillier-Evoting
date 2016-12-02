@@ -1,0 +1,6 @@
+[submodule "paillier"]
+	path = paillier
+	url = https://github.com/mikeivanov/paillier.git
+[submodule "Pailler Evoting/paillier"]
+	path = Pailler Evoting/paillier
+	url = https://github.com/mikeivanov/paillier.git
