@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import paillier
 import paillier.paillier as p
 import rsa
 import pickle

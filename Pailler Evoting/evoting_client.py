@@ -3,7 +3,6 @@ from __future__ import print_function
 import eventlet
 import pickle
 import json
-import paillier
 import paillier.paillier as p
 from pprint import pprint
 import hashlib

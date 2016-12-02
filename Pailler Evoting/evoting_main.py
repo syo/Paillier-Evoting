@@ -5,7 +5,6 @@ from __future__ import print_function
 import eventlet
 
 import socket
-import paillier
 import paillier.paillier as p
 import rsa
 import json
