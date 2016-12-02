@@ -13,7 +13,7 @@ import pickle
 from pprint import pprint
 
 class EB:
-    def __init__(self, voters, canidates):
+    def __init__(self, voters, candidates):
 
         private_keyfile = open("keyserver/Private/EB_paillier.key", 'r')
         public_keyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
@@ -28,7 +28,7 @@ class EB:
         self.privateRSA = pickle.load(RSA_public_keyfile)
 
         self.reg_voters = voters # list of ids for registered voters
-        self.canidates = canidates
+        self.candidates = candidates
     def get_public(self): # func to get the public key
         return self.public
     def arr_decrypt(self, vlist):
@@ -42,9 +42,29 @@ class EB:
     def is_registered(self, voter_id):
         return voter_id in self.reg_voters
 
+    def register_voter(self, vote, auth, encrypted_id):
+        found = True
+        voter_id = rsa.decrypt(encrypted_id,self.privateRSA)
+        print("Voter ID:",voter_id)
+        print("vote:",vote)
+        print("auth:",auth)
+        for p in self.reg_voters:
+            if (p["voter_id"] == voter_id):
+                if "voted" in p and p["voted"]:
+                    return json.dumps({"MESSAGE":"Not a valid VOTERID for voting at this time", "SUCCESS":False})
+                found = True
+                p["voted"] = True
+                break
+        if found:
+            signed_vote = rsa.encrypt(vote,self.privateRSA)
+            signed_auth = rsa.encrypt(auth,self.privateRSA)
+            return json.dumps({"MESSAGE":"Successful registration", "SUCCESS":True})
+        else:
+            return json.dumps({"MESSAGE":"Not a valid VOTERID for voting at this time", "SUCCESS":False})
+
 class BB:
-    def __init__(self, n_voters, n_canidates):
-        self.table = [ [ 0 for _ in range(0, n_canidates) ] for _ in range (0, n_voters) ]
+    def __init__(self, n_voters, n_candidates):
+        self.table = [ [ 0 for _ in range(0, n_candidates) ] for _ in range (0, n_voters) ]
         self.has_voted = []
         self.votes = []
 
@@ -69,19 +89,52 @@ class CA:
         return totals
 
 class Election:
-    def __init__(self,voters,canidates):
-        self.eb = EB(voters, canidates) #initialize EB, BB, CA
-        self.bb = BB(len(voters), len(canidates))
+    def __init__(self,voters,candidates):
+        self.eb = EB(voters, candidates) #initialize EB, BB, CA
+        self.bb = BB(len(voters), len(candidates))
         self.ca = CA()
-        self.canidates = canidates
+        self.candidates = candidates
 
-    def get_canidates(self):
-        return self.canidates
+    def get_candidates(self):
+        return self.candidates
+
+    def register_voter(self, message):
+        vote = ""
+        try:
+            vote = m["VOTE"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include VOTE field", "SUCCESS":False})
+
+
+        auth = ""
+        try:
+            auth = m["AUTHORIZATION"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include AUTHORIZATION field", "SUCCESS":False})
+        voter_id = ""
+        try:
+            voter_id = m["VOTERID"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include VOTERID field", "SUCCESS":False})
+
+        return this.eb.register_voter(vote, auth, voter_id)
+
+
 
     def get_response(self,message):
         m = json.loads(message)
-        if m["TYPE"] == "REQUEST CANIDATES":
-            return json.dumps({"DATA":self.get_canidates()})
+        type = ""
+        try:
+            type = m["TYPE"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include TYPE field", "SUCCESS":False})
+
+        if type == "REQUEST CANDIDATES":
+            return json.dumps({"MESSAGE":"CANIDATE DATA","DATA":self.get_candidates(), "SUCCESS":True})
+        elif type == "REGISTER":
+            return this.register_voter(m)
+        else:
+            return json.dumps({"MESSAGE":"TYPE did not match any expected operation", "SUCCESS":False})
 
     def handle(self,fd):
         print("client connected")
@@ -106,12 +159,12 @@ def encrypted_arr_add(pub,list1,list2):
 def main():
     with open('database/registered.json') as data_file:
         voters = json.load(data_file)
-    with open('database/canidates.json') as data_file2:
-        canidates = json.load(data_file2)
+    with open('database/candidates.json') as data_file2:
+        candidates = json.load(data_file2)
     pprint(voters)
-    pprint(canidates)
+    pprint(candidates)
 
-    E = Election(voters, canidates)
+    E = Election(voters, candidates)
 
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
@@ -160,7 +213,7 @@ def main():
 
 """
 TODO:
-Deal with registration/candidate selection and init stuff for BB/EB/CA
+Deal with registration/candidates selection and init stuff for BB/EB/CA
 Create the voting client and everything it does
 Zero Knowledge Proof stuff
 Figure out how we wanna do the voting period
