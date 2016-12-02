@@ -69,7 +69,7 @@ def main():
         crypto = p.encrypt(paillierKey, v)
         encrypted_vote.append(crypto)
         hash.update(str(crypto))
-        print(str(i)+"/"+len(vote))
+        print(str(i)+"/"+str(len(vote)))
     authorization_token = "Authorized Voter "+hash.hexdigest()
 
     print("Blinding vote")
@@ -77,7 +77,7 @@ def main():
     for i,v in enumerate(encrypted_vote):
         crypto = rsa.encrypt(v, key1)
         blinded_vote.append(str(crypto))
-        print(str(i)+"/"+len(vote))
+        print(str(i)+"/"+str(len(vote)))
 
     blinded_auth = rsa.encrypt(authorization_token,key1)
     encrypted_id = rsa.encrypt(voter_id, rsaKey)
