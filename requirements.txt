@@ -1,2 +1,3 @@
 eventlet>=0.19
 rsa>=3.4.2
+git+https://github.com/kmcnellis/paillier.git

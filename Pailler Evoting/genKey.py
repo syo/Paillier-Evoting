@@ -8,7 +8,7 @@ res = raw_input("Enter '1' for EB_paillier, '2' for EB_RSA, or '3' for BB_RSA: "
 
 if (res == "1"): #EB_paillier
     print "Generating keypair..."
-    priv, pub = p.generate_keypair(1024) #generate public and private keys
+    priv, pub = p.generate_keypair(512) #generate public and private keys
     #public key gets given to voters to encrypt their votes
 
     private_keyfile = open("keyserver/Private/EB_paillier.key", 'w')
@@ -20,7 +20,7 @@ if (res == "1"): #EB_paillier
 
 if (res == "2"): #EB_RSA
     print "Generating keypair..."
-    (priv, pub) = rsa.newkeys(1024)
+    (priv, pub) = rsa.newkeys(4096,poolsize=4)
     #public key gets given to voters to encrypt their votes
 
     private_keyfile = open("keyserver/Private/EB_RSA.key", 'w')
@@ -31,7 +31,7 @@ if (res == "2"): #EB_RSA
 
 if (res == "3"): #EB_RSA
     print "Generating keypair..."
-    (priv, pub) = rsa.newkeys(1024)
+    (priv, pub) = rsa.newkeys(4096,poolsize=4)
     #public key gets given to voters to encrypt their votes
 
     private_keyfile = open("keyserver/Private/BB_RSA.key", 'w')

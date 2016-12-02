@@ -10,6 +10,7 @@ import rsa
 import json
 import pickle
 from pprint import pprint
+import base64
 
 class EB:
     def __init__(self, voters, candidates):
@@ -43,21 +44,35 @@ class EB:
 
     def register_voter(self, vote, auth, encrypted_id):
         found = True
-        voter_id = rsa.decrypt(encrypted_id,self.privateRSA)
+        voter_id = rsa.decrypt(base64.b64decode(encrypted_id),self.privateRSA)
         print("Voter ID:",voter_id)
         print("vote:",vote)
         print("auth:",auth)
-        for p in self.reg_voters:
-            if (p["voter_id"] == voter_id):
-                if "voted" in p and p["voted"]:
+        for person in self.reg_voters:
+            if (person["voter_id"] == voter_id):
+                if "voted" in person and person["voted"]:
                     return json.dumps({"MESSAGE":"Not a valid VOTERID for voting at this time", "SUCCESS":False})
                 found = True
-                p["voted"] = True
+                person["voted"] = True
                 break
         if found:
-            signed_vote = rsa.encrypt(vote,self.privateRSA)
-            signed_auth = rsa.encrypt(auth,self.privateRSA)
-            return json.dumps({"MESSAGE":"Successful registration", "SUCCESS":True})
+            signed_vote = []
+            for v in vote:
+                # try:
+                v2 = p.signBlind(self.privateRSA,base64.b64decode(v))
+                signed_vote.append(base64.encode(v2))
+                # except OverflowError:
+                #     return json.dumps({"MESSAGE":"VOTE is too long to sign", "SUCCESS":False})
+
+            signed_auth = ""
+
+            # try:
+            signed_auth = p.signBlind(self.privateRSA,base64.b64decode(auth))
+            signed_auth = base64.encode(signed_auth)
+            # except OverflowError:
+            #     return json.dumps({"MESSAGE":"AUTH is too long to sign", "SUCCESS":False})
+
+            return json.dumps({"MESSAGE":"Successful registration", "SUCCESS":True,"VOTE":signed_vote, "AUTH":signed_auth})
         else:
             return json.dumps({"MESSAGE":"Not a valid VOTERID for voting at this time", "SUCCESS":False})
 
@@ -97,7 +112,7 @@ class Election:
     def get_candidates(self):
         return self.candidates
 
-    def register_voter(self, message):
+    def register_voter(self, m):
         vote = ""
         try:
             vote = m["VOTE"]
@@ -116,7 +131,7 @@ class Election:
         except KeyError:
             return json.dumps({"MESSAGE":"Must include VOTERID field", "SUCCESS":False})
 
-        return this.eb.register_voter(vote, auth, voter_id)
+        return self.eb.register_voter(vote, auth, voter_id)
 
 
 
@@ -131,7 +146,7 @@ class Election:
         if type == "REQUEST CANDIDATES":
             return json.dumps({"MESSAGE":"CANIDATE DATA","DATA":self.get_candidates(), "SUCCESS":True})
         elif type == "REGISTER":
-            return this.register_voter(m)
+            return self.register_voter(m)
         else:
             return json.dumps({"MESSAGE":"TYPE did not match any expected operation", "SUCCESS":False})
 
