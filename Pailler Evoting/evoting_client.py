@@ -118,7 +118,7 @@ def main():
         rand = blinded_r[i]
 
         unblinded = rsaKey.key._unblind(v, rand)
-        signed_vote.append(unblinded)
+        signed_vote.append(base64.b64encode(str(unblinded)))
 
 
     signed_blinded_auth = long(base64.b64decode(r["AUTH"]))

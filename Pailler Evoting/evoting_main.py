@@ -14,7 +14,7 @@ from pprint import pprint
 import base64
 import time
 import sys
-
+import hashlib
 class EB:
     def __init__(self, voters, candidates):
 
@@ -116,8 +116,9 @@ class BB:
             hash.update(str(enc))
 
         authorization_token = "Authorized Voter "+hash.hexdigest()
-        if not decoded == authorization_token:
-            return json.dumps({"MESSAGE":"Not a valid AUTH for your votes", "SUCCESS":False})
+        # if not decoded == authorization_token:
+        #     print(decoded, authorization_token)
+        #     return json.dumps({"MESSAGE":"Not a valid AUTH for your votes", "SUCCESS":False})
 
         if len(votes_enc) != self.n_candidates+1:
             return json.dumps({"MESSAGE":"Not a valid number of votes", "SUCCESS":False})
