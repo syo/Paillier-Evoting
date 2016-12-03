@@ -41,10 +41,7 @@ class EB:
     def get_public(self): # func to get the public key
         return self.public
     def arr_decrypt(self, vlist):
-        result = [0 for x in range(len(vlist))]
-        for i in range(len(vlist)):
-            [i] = p.decrypt(self.private,self.public,vlist[i])
-        return result
+        return [p.decrypt(self.private,self.public,x) for x in vlist]
     def announce_results(self, vlist): #used for decrypting the sum at the end
         results = self.arr_decrypt(vlist)
         for i in range(len(results)):
@@ -169,10 +166,15 @@ class CA:
         public_keyfile.close()
 
     def get_sum(self, vlist):
-        totals = [p.encrypt(self.public,0) for x in range(len(vlist))] #initialize totals, leave out verification token
-        for v in vlist: #add up encrypted vote totals
-            totals = encrypted_arr_add(self.public,totals,v)
+        totals = []
+        print(len(vlist))
+        for i in range(len(vlist[0])): #add up encrypted vote totals
+            totals.append(self.get_candidate_total(i, vlist))
         return totals
+
+    def get_candidate_total(self, i, vlist):
+        candidate_votes = [vlist[x][i] for x in range(len(vlist))]
+        return reduce(lambda x, y: p.e_add(self.public, x, y), candidate_votes)
 
 class Election:
     def __init__(self,voters,candidates):
@@ -267,12 +269,6 @@ class Election:
         print("client disconnected")
 
 
-def encrypted_arr_add(pub,list1,list2):
-    list3 = [0 for x in range(len(list1) - 1)]
-    for i in range(len(list1)):
-        list3[i] = p.e_add(pub,list1[i],list2[i])
-    return list3
-
 def main():
     with open('database/registered.json') as data_file:
         voters = json.load(data_file)
@@ -284,7 +280,7 @@ def main():
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
 
-    time = 60
+    time = 1
     # buffer_size = 1024
     # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # s.bind((tcp_ip,tcp_port))
