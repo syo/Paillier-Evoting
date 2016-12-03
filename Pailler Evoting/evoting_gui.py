@@ -9,6 +9,7 @@ import hashlib
 from Crypto.PublicKey import RSA
 from Crypto.Util.number import getRandomRange, bytes_to_long, long_to_bytes, size, inverse, GCD
 import base64
+import sys
 
 from Tkinter import *
 
@@ -34,13 +35,16 @@ def submit_vote(choice_val, voter_id, candidates):
     encrypted_vote = []
     hash = hashlib.sha224()
     znp = []
+    znp_set = []
     statusLabel["text"] = "Encrypting Vote"
     root.update_idletasks()
     for i,v in enumerate(vote):
         # crypto = rsa.encrypt(v, key1)
         crypto,r = p.encryptFactors(paillierKey, v)
         proof = p.genZKP(paillierKey, v, crypto, r)
+        proof_set = p.genZKPset(paillierKey, v, crypto, r)
         znp.append(proof)
+        znp_set.append(proof_set)
         encrypted_vote.append(crypto)
         hash.update(str(crypto))
 
@@ -101,7 +105,7 @@ def submit_vote(choice_val, voter_id, candidates):
     statusLabel["text"] = "Submitting your vote"
     root.update_idletasks()
 
-    message = json.dumps({"TYPE":"VOTE", "ZNP":znp,"VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
+    message = json.dumps({"TYPE":"VOTE", "ZNP":znp,"ZNPSET":znp_set,"VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
 
     client.sendall(message+"\n")
     response = client.recv(buffer_size)
@@ -113,6 +117,10 @@ def submit_vote(choice_val, voter_id, candidates):
     else:
         statusLabel["text"] = "Successful vote"
         root.update_idletasks()
+
+    print("Successful vote")
+    sys.exit(0)
+
 
 def main():
     choice_val = IntVar()

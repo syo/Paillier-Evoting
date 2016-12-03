@@ -11,11 +11,14 @@ from Crypto.Util.number import getRandomRange, bytes_to_long, long_to_bytes, siz
 import base64
 
 def main():
-    tcp_ip = '127.0.0.1' #set up a tcp server
+    #Connect to tcp server
+    tcp_ip = '127.0.0.1'
     tcp_port = 5005
     buffer_size = 4096
     print("Connecting to the server")
     client = eventlet.connect((tcp_ip, tcp_port))
+
+    #Retrive public keyfiles
     paillierKeyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
     paillierKey = pickle.load(paillierKeyfile)
     paillierKeyfile.close()
@@ -24,9 +27,7 @@ def main():
     rsaKey = RSA.importKey(rsaKeyfile.read())
     rsaKeyfile.close()
 
-    blindKey = p.getRandomModNStar(rsaKey.n)
-    # voter_id = raw_input("Enter your voter ID to start voting:\n")
-    voter_id = "95f173b7-d072-4700-9d64-857e79c12ff1"
+    voter_id = raw_input("Enter your voter ID to start voting:\n")
 
     print("Getting canidates")
     # Get candidates
@@ -38,7 +39,7 @@ def main():
         print("Operation Failed.", r["MESSAGE"])
         return
 
-    candidates = r["DATA"]
+    candidates = r["DATA"] #Save list of canidates
 
     print("Your candidates for this election are:")
     for i, can in enumerate(candidates):
@@ -47,22 +48,21 @@ def main():
     done = False
     choice_val = -1
     while not done:
-        # choice = raw_input("Enter the number of your chosen canidate:\n")
-        choice = 1
+        choice = raw_input("Enter the number of your chosen canidate:\n")
         try:
             choice_val = int(choice)
             if (choice_val > len(candidates)+1) or (choice_val < 1):
                 print("Invalid number, try again")
             else:
                 print("You chose candidate "+str(choice_val)+": "+candidates[choice_val-1]["name"]+". Is this correct?")
-                # accept = raw_input("Enter 'yes' to accept, or 'no' to return to selection:\n")
-                accept = "yes"
+                accept = raw_input("Enter 'yes' to accept, or 'no' to return to selection:\n")
                 if (accept == "yes"):
                     done = True
 
         except ValueError:
            print("Invalid entry, try again")
 
+    #Save the vote
     vote = [0 for i in xrange(len(candidates)+1)]
     vote[choice_val] = 1
     authorization_token = "Voter"
