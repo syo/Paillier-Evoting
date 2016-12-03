@@ -53,7 +53,7 @@ class EB:
         return voter_id in self.reg_voters
 
     def register_voter(self, vote, auth, encrypted_id):
-        found = True
+        found = False
         voter_id = self.privateRSA.decrypt(base64.b64decode(encrypted_id))
         for person in self.reg_voters:
             if (person["voter_id"] == voter_id):
@@ -95,9 +95,13 @@ class BB:
         self.publicRSA = RSA.importKey(RSA_public_keyfile.read())
         RSA_public_keyfile.close()
 
+        public_keyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
+        self.public = pickle.load(public_keyfile)
+        public_keyfile.close()
+
     def get_votes(self):
         return self.votes
-    def receive_vote(self, vote, auth):
+    def receive_vote(self, vote, auth, znp):
         value = long(base64.b64decode(auth))
         decoded = long_to_bytes(self.publicRSA.encrypt(value,0)[0])
         # print("Auth:",decoded)
@@ -107,24 +111,48 @@ class BB:
         if not decoded.startswith("Authorized Voter"):
             return json.dumps({"MESSAGE":"Not a valid AUTH for voting at this time", "SUCCESS":False})
 
-        hash = hashlib.sha224()
         votes_enc = []
+
         for v in vote:
             val = long(base64.b64decode(v))
-            enc = self.publicRSA.encrypt(value,0)[0]
+            enc = self.publicRSA.encrypt(val, 0)[0]
             votes_enc.append(enc)
-            hash.update(str(enc))
-
-        authorization_token = "Authorized Voter "+hash.hexdigest()
-        # if not decoded == authorization_token:
-        #     print(decoded, authorization_token)
-        #     return json.dumps({"MESSAGE":"Not a valid AUTH for your votes", "SUCCESS":False})
 
         if len(votes_enc) != self.n_candidates+1:
             return json.dumps({"MESSAGE":"Not a valid number of votes", "SUCCESS":False})
 
         if len(self.votes) == self.n_voters:
             return json.dumps({"MESSAGE":"All votes have already been submitted", "SUCCESS":False})
+
+        for i, proof in enumerate(znp):
+            try:
+                n = self.public.n
+                n_sq = self.public.n_sq
+                g = self.public.g
+                x = proof["x"]
+                s = proof["s"]
+                u = proof["u"]
+                e = proof["e"]
+                v = proof["v"]
+                w = proof["w"]
+
+
+                if not p.inModN(x,n) or not p.inModNStar(s,n) or not p.inModN(e,n):
+                    return json.dumps({"MESSAGE":"Invalid ZNP (inModN)", "SUCCESS":False})
+
+                if not u == (pow(g, x, n_sq) * pow(s, n, n_sq)) % n_sq:
+                    return json.dumps({"MESSAGE":"Invalid ZNP (u)", "SUCCESS":False})
+
+
+                result = (pow(g, v, n_sq)*pow(votes_enc[i], e, n_sq)*pow(w, n, n_sq)) % n_sq
+                if not result == u:
+                    return json.dumps({"MESSAGE":"Invalid ZNP(result)", "SUCCESS":False})
+
+            except KeyError:
+                return json.dumps({"MESSAGE":"Invalid ZNP", "SUCCESS":False})
+
+
+
 
         self.has_voted.append(auth)
         self.votes.append(votes_enc)
@@ -194,9 +222,13 @@ class Election:
             auth = m["AUTHORIZATION"]
         except KeyError:
             return json.dumps({"MESSAGE":"Must include AUTHORIZATION field", "SUCCESS":False})
-        voter_id = ""
+        znp = ""
+        try:
+            znp = m["ZNP"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include ZNP field", "SUCCESS":False})
 
-        return self.bb.receive_vote(vote, auth)
+        return self.bb.receive_vote(vote, auth, znp)
 
     def get_response(self,message):
         m = json.loads(message)
@@ -233,7 +265,7 @@ class Election:
 
 
 def encrypted_arr_add(pub,list1,list2):
-    list3 = [0 for x in range(len(vlist) - 1)]
+    list3 = [0 for x in range(len(list1) - 1)]
     for i in range(len(list1)):
         list3[i] = p.e_add(pub,list1[i],list2[i])
     return list3
@@ -249,7 +281,7 @@ def main():
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
 
-    time = 1
+    time = 60
     # buffer_size = 1024
     # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # s.bind((tcp_ip,tcp_port))

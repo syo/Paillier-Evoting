@@ -25,7 +25,9 @@ def main():
     rsaKeyfile.close()
 
     blindKey = p.getRandomModNStar(rsaKey.n)
-    voter_id = raw_input("Enter your voter ID to start voting:\n")
+    # voter_id = raw_input("Enter your voter ID to start voting:\n")
+    voter_id = "95f173b7-d072-4700-9d64-857e79c12ff1"
+
     print("Getting canidates")
     # Get candidates
     message = json.dumps({"TYPE":"REQUEST CANDIDATES"})
@@ -45,14 +47,16 @@ def main():
     done = False
     choice_val = -1
     while not done:
-        choice = raw_input("Enter the number of your chosen canidate:\n")
+        # choice = raw_input("Enter the number of your chosen canidate:\n")
+        choice = 1
         try:
             choice_val = int(choice)
             if (choice_val > len(candidates)+1) or (choice_val < 1):
                 print("Invalid number, try again")
             else:
                 print("You chose candidate "+str(choice_val)+": "+candidates[choice_val-1]["name"]+". Is this correct?")
-                accept = raw_input("Enter 'yes' to accept, or 'no' to return to selection:\n")
+                # accept = raw_input("Enter 'yes' to accept, or 'no' to return to selection:\n")
+                accept = "yes"
                 if (accept == "yes"):
                     done = True
 
@@ -70,8 +74,7 @@ def main():
         print(str(i+1)+"/"+str(len(vote)))
         # crypto = rsa.encrypt(v, key1)
         crypto,r = p.encryptFactors(paillierKey, v)
-        proof = {"c":crypto, "r":r, "m":v}
-
+        proof = p.genZKP(paillierKey, v, crypto, r)
         znp.append(proof)
         encrypted_vote.append(crypto)
         hash.update(str(crypto))
@@ -85,6 +88,9 @@ def main():
         blinded_r.append(rand)
 
         blinded = rsaKey.key._blind(v, rand)
+        # h = rsaKeyPriv.sign(blinded, 0)[0]
+        # i = rsaKey.key._unblind(h, rand)
+        # j = rsaKey.encrypt(i, 0)[0]
         blinded_vote.append(base64.b64encode(str(blinded)))
 
     auth_r = getRandomRange(1, rsaKey.key.n-1, randfunc=rsaKey._randfunc)
@@ -113,11 +119,13 @@ def main():
 
     signed_blinded_vote = r["VOTE"]
     signed_vote = []
+
     for i in xrange(len(signed_blinded_vote)):
         v = long(base64.b64decode(signed_blinded_vote[i]))
         rand = blinded_r[i]
 
         unblinded = rsaKey.key._unblind(v, rand)
+
         signed_vote.append(base64.b64encode(str(unblinded)))
 
 
@@ -125,7 +133,7 @@ def main():
     signed_auth = rsaKey.key._unblind(signed_blinded_auth, auth_r)
     print("Submitting your vote")
 
-    message = json.dumps({"TYPE":"VOTE", "VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
+    message = json.dumps({"TYPE":"VOTE", "ZNP":znp,"VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
 
     client.sendall(message+"\n")
     response = client.recv(buffer_size)
