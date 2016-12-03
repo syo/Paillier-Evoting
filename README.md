@@ -36,7 +36,7 @@ Voter has private blind signature keys
    2. CA sums all votes
    3. CA sends sums to EB
    4. EB decrypts using private Paillier & releases results
-
+1. After the designated amount of time, the election closes and results are announced
 ## Requirements:
 1. python2.7
 2. Update Pailler Evoting/paillier submodule (https://github.com/kcmcnellis/paillier.git)
@@ -49,6 +49,9 @@ Voter has private blind signature keys
 
 ### To run using gui:
 ```python evoting_gui.py```
+
+### To change the election time period
+Change `time = 10` on line 340 of `Pailler Evoting/evoting_main.py` to the number of minutes the election should run for
 
 ## Assumptions
 1. Everything in the `database` file is securely stored and only the server has access to it.

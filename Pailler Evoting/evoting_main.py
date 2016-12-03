@@ -337,7 +337,7 @@ def main():
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
 
-    time = 1
+    time = 10 # How many minutes the election runs for
 
     print("server socket listening on port",tcp_port)
     print("Election will be open for",time,"minutes")
@@ -348,7 +348,7 @@ def main():
     while E.open:
         try:
             new_sock, address = server.accept()
-            # print("accepted", address)
+            # Spawn a new co-routine per client connection
             pool.spawn_n(E.handle, new_sock.makefile('rw'))
         except (SystemExit, KeyboardInterrupt):
             break
