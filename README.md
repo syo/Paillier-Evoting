@@ -60,6 +60,6 @@ Voter has private blind signature keys
 The ZNPs used (knowledge of plaintext and plaintext is in a given set) are from Practical Multi-Candidate Election System (O. Baudron, P.-A. Fouque, D. Pointcheval, G. Poupard, and J. Stern)
 
 ## Libraries
-1. Paillier encryption : https://github.com/mikeivanov/paillier
+1. Paillier encryption : https://github.com/mikeivanov/paillier (forked, a copy is provided in `Pailler Evoting/paillier`)
 2. RSA encryption : [pycrypto](https://www.dlitz.net/software/pycrypto/)
 3. Sockets & threading : [eventlet](http://eventlet.net/)
