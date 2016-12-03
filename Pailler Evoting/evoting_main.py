@@ -6,11 +6,14 @@ import eventlet
 
 import socket
 import paillier.paillier as p
-import rsa
+from Crypto.PublicKey import RSA
+from Crypto.Util.number import getRandomRange, bytes_to_long, long_to_bytes, size, inverse, GCD
 import json
 import pickle
 from pprint import pprint
 import base64
+import time
+import sys
 
 class EB:
     def __init__(self, voters, candidates):
@@ -18,14 +21,20 @@ class EB:
         private_keyfile = open("keyserver/Private/EB_paillier.key", 'r')
         public_keyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
 
-        self.public = pickle.load(private_keyfile)
-        self.private = pickle.load(public_keyfile)
+        self.public = pickle.load(public_keyfile)
+        self.private = pickle.load(private_keyfile)
+
+        private_keyfile.close()
+        public_keyfile.close()
 
         RSA_private_keyfile = open("keyserver/Private/EB_RSA.key", 'r')
         RSA_public_keyfile = open("keyserver/Public/EB_RSA_public.key", 'r')
 
-        self.publicRSA = pickle.load(RSA_private_keyfile)
-        self.privateRSA = pickle.load(RSA_public_keyfile)
+        self.privateRSA = RSA.importKey(RSA_private_keyfile.read())
+        self.publicRSA = RSA.importKey(RSA_public_keyfile.read())
+
+        RSA_private_keyfile.close()
+        RSA_public_keyfile.close()
 
         self.reg_voters = voters # list of ids for registered voters
         self.candidates = candidates
@@ -35,8 +44,9 @@ class EB:
         result = [0 for x in range(len(vlist))]
         for i in range(len(vlist)):
             [i] = p.decrypt(self.private,self.public,vlist[i])
-        announce_results(result)
-    def announce_results(self, results): #used for decrypting the sum at the end
+        return result
+    def announce_results(self, vlist): #used for decrypting the sum at the end
+        results = self.arr_decrypt(vlist)
         for i in range(len(results)):
             print("Choice " + str(i) + " received " + str(results[i]) + " votes ")
     def is_registered(self, voter_id):
@@ -44,10 +54,7 @@ class EB:
 
     def register_voter(self, vote, auth, encrypted_id):
         found = True
-        voter_id = rsa.decrypt(base64.b64decode(encrypted_id),self.privateRSA)
-        print("Voter ID:",voter_id)
-        print("vote:",vote)
-        print("auth:",auth)
+        voter_id = self.privateRSA.decrypt(base64.b64decode(encrypted_id))
         for person in self.reg_voters:
             if (person["voter_id"] == voter_id):
                 if "voted" in person and person["voted"]:
@@ -58,48 +65,81 @@ class EB:
         if found:
             signed_vote = []
             for v in vote:
-                # try:
-                v2 = p.signBlind(self.privateRSA,base64.b64decode(v))
-                signed_vote.append(base64.encode(v2))
-                # except OverflowError:
-                #     return json.dumps({"MESSAGE":"VOTE is too long to sign", "SUCCESS":False})
+                try:
+                    blinded = long(base64.b64decode(v))
+                    signed = self.privateRSA.sign(blinded, 0)[0]
+                    signed_vote.append(base64.b64encode(str(signed)))
+                except OverflowError:
+                    return json.dumps({"MESSAGE":"VOTE is too long to sign", "SUCCESS":False})
 
             signed_auth = ""
 
-            # try:
-            signed_auth = p.signBlind(self.privateRSA,base64.b64decode(auth))
-            signed_auth = base64.encode(signed_auth)
-            # except OverflowError:
-            #     return json.dumps({"MESSAGE":"AUTH is too long to sign", "SUCCESS":False})
+            try:
+                blinded = long(base64.b64decode(auth))
+                signed_auth = self.privateRSA.sign(blinded, 0)[0]
+            except OverflowError:
+                return json.dumps({"MESSAGE":"AUTH is too long to sign", "SUCCESS":False})
 
-            return json.dumps({"MESSAGE":"Successful registration", "SUCCESS":True,"VOTE":signed_vote, "AUTH":signed_auth})
+            return json.dumps({"MESSAGE":"Successful registration", "SUCCESS":True,"VOTE":signed_vote, "AUTH":base64.b64encode(str(signed_auth))})
         else:
             return json.dumps({"MESSAGE":"Not a valid VOTERID for voting at this time", "SUCCESS":False})
 
 class BB:
     def __init__(self, n_voters, n_candidates):
-        self.table = [ [ 0 for _ in range(0, n_candidates) ] for _ in range (0, n_voters) ]
-        self.has_voted = []
         self.votes = []
+        self.has_voted = []
+        self.n_candidates = n_candidates
+        self.n_voters = n_voters
 
-        RSA_private_keyfile = open("keyserver/Private/EB_RSA.key", 'r')
-        RSA_public_keyfile = open("keyserver/Public/EB_RSA_public.key", 'r')
+        RSA_public_keyfile= open("keyserver/Public/EB_RSA_public.key", 'r')
+        self.publicRSA = RSA.importKey(RSA_public_keyfile.read())
+        RSA_public_keyfile.close()
 
-        self.publicRSA = pickle.load(RSA_private_keyfile)
-        self.privateRSA = pickle.load(RSA_public_keyfile)
     def get_votes(self):
         return self.votes
-    def receive_vote(self, v):
-        if (v[len(v)-1] in self.has_voted): # if you have already received this persons vote...
-            return False # exit out
-        self.has_voted.append(v[len(v)-1]) # add this id to list of those who've voted
-        self.votes.append(v[:-1]) # add their votes to the votes
+    def receive_vote(self, vote, auth):
+        value = long(base64.b64decode(auth))
+        decoded = long_to_bytes(self.publicRSA.encrypt(value,0)[0])
+        # print("Auth:",decoded)
+        if (auth in self.has_voted): # if you have already received this persons vote...
+            return json.dumps({"MESSAGE":"Not a valid AUTH for voting at this time", "SUCCESS":False})
+
+        if not decoded.startswith("Authorized Voter"):
+            return json.dumps({"MESSAGE":"Not a valid AUTH for voting at this time", "SUCCESS":False})
+
+        hash = hashlib.sha224()
+        votes_enc = []
+        for v in vote:
+            val = long(base64.b64decode(v))
+            enc = self.publicRSA.encrypt(value,0)[0]
+            votes_enc.append(enc)
+            hash.update(str(enc))
+
+        authorization_token = "Authorized Voter "+hash.hexdigest()
+        if not decoded == authorization_token:
+            return json.dumps({"MESSAGE":"Not a valid AUTH for your votes", "SUCCESS":False})
+
+        if len(votes_enc) != self.n_candidates+1:
+            return json.dumps({"MESSAGE":"Not a valid number of votes", "SUCCESS":False})
+
+        if len(self.votes) == self.n_voters:
+            return json.dumps({"MESSAGE":"All votes have already been submitted", "SUCCESS":False})
+
+        self.has_voted.append(auth)
+        self.votes.append(votes_enc)
+
+        return json.dumps({"MESSAGE":"Votes recorded", "SUCCESS":True})
 
 class CA:
-    def get_sum(self, vlist, pub):
-        totals = [p.encrypt(pub,0) for x in range(len(vlist))] #initialize totals, leave out verification token
+    def __init__(self):
+        public_keyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
+        self.public = pickle.load(public_keyfile)
+        public_keyfile.close()
+
+    def get_sum(self, vlist):
+        totals = [p.encrypt(self.public,0) for x in range(len(vlist))] #initialize totals, leave out verification token
         for v in vlist: #add up encrypted vote totals
-            totals = encrypted_arr_add(pub,totals,v)
+            totals = encrypted_arr_add(self.public,totals,v)
         return totals
 
 class Election:
@@ -108,6 +148,14 @@ class Election:
         self.bb = BB(len(voters), len(candidates))
         self.ca = CA()
         self.candidates = candidates
+        self.open = True
+
+    def end_election(self):
+        self.open = False
+        totals = self.ca.get_sum(self.bb.votes)
+        print("Election is over")
+        self.eb.announce_results(totals)
+        sys.exit(0)
 
     def get_candidates(self):
         return self.candidates
@@ -133,10 +181,27 @@ class Election:
 
         return self.eb.register_voter(vote, auth, voter_id)
 
+    def receive_vote(self, m):
+        vote = ""
+        try:
+            vote = m["VOTE"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include VOTE field", "SUCCESS":False})
 
+        auth = ""
+        try:
+            auth = m["AUTHORIZATION"]
+        except KeyError:
+            return json.dumps({"MESSAGE":"Must include AUTHORIZATION field", "SUCCESS":False})
+        voter_id = ""
+
+        return self.bb.receive_vote(vote, auth)
 
     def get_response(self,message):
         m = json.loads(message)
+        if not self.open:
+            return json.dumps({"MESSAGE":"Election is Closed", "SUCCESS":False})
+
         type = ""
         try:
             type = m["TYPE"]
@@ -147,6 +212,8 @@ class Election:
             return json.dumps({"MESSAGE":"CANIDATE DATA","DATA":self.get_candidates(), "SUCCESS":True})
         elif type == "REGISTER":
             return self.register_voter(m)
+        elif type == "VOTE":
+            return self.receive_vote(m)
         else:
             return json.dumps({"MESSAGE":"TYPE did not match any expected operation", "SUCCESS":False})
 
@@ -160,7 +227,7 @@ class Election:
             res = self.get_response(x)
             fd.write(res+"\n")
             fd.flush()
-            print("echoed", x, end=' ')
+            # print("echoed", res, end=' ')
         print("client disconnected")
 
 
@@ -175,25 +242,28 @@ def main():
         voters = json.load(data_file)
     with open('database/candidates.json') as data_file2:
         candidates = json.load(data_file2)
-    pprint(voters)
-    pprint(candidates)
 
     E = Election(voters, candidates)
 
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
+
+    time = 1
     # buffer_size = 1024
     # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # s.bind((tcp_ip,tcp_port))
 
 
     print("server socket listening on port",tcp_port)
+    print("Election will be open for",time,"minutes")
+    print("There are", len(candidates),"canidates and",len(voters),"registered voters")
     server = eventlet.listen((tcp_ip, tcp_port))
     pool = eventlet.GreenPool()
-    while True:
+    eventlet.greenthread.spawn_after(time * 60, E.end_election)
+    while E.open:
         try:
             new_sock, address = server.accept()
-            print("accepted", address)
+            # print("accepted", address)
             pool.spawn_n(E.handle, new_sock.makefile('rw'))
         except (SystemExit, KeyboardInterrupt):
             break

@@ -6,34 +6,31 @@ import json
 import paillier.paillier as p
 from pprint import pprint
 import hashlib
-import rsa
+from Crypto.PublicKey import RSA
+from Crypto.Util.number import getRandomRange, bytes_to_long, long_to_bytes, size, inverse, GCD
 import base64
+
 def main():
     tcp_ip = '127.0.0.1' #set up a tcp server
     tcp_port = 5005
-    # buffer_size = 1024
-    # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # s.bind((tcp_ip,tcp_port))
-    print("Generating keypair...")
-    # (key1, key2) = rsa.newkeys(4096,poolsize=4)
+    buffer_size = 4096
+    print("Connecting to the server")
+    client = eventlet.connect((tcp_ip, tcp_port))
     paillierKeyfile = open("keyserver/Public/EB_paillier_public.key", 'r')
     paillierKey = pickle.load(paillierKeyfile)
+    paillierKeyfile.close()
+
     rsaKeyfile = open("keyserver/Public/EB_RSA_public.key", 'r')
-    rsaKey = pickle.load(rsaKeyfile)
+    rsaKey = RSA.importKey(rsaKeyfile.read())
+    rsaKeyfile.close()
 
     blindKey = p.getRandomModNStar(rsaKey.n)
-
-    rsaKeyfile = open("keyserver/Public/BB_RSA_public.key", 'r')
-    rsaKeyBB = pickle.load(rsaKeyfile)
-
-    # voter_id = raw_input("Enter your voter ID to start voting:\n")
-    voter_id = "95f173b7-d072-4700-9d64-857e79c12ff1"
-    client = eventlet.connect((tcp_ip, tcp_port))
-
+    voter_id = raw_input("Enter your voter ID to start voting:\n")
+    print("Getting canidates")
     # Get candidates
     message = json.dumps({"TYPE":"REQUEST CANDIDATES"})
     client.sendall(message+"\n")
-    response = client.recv(1024)
+    response = client.recv(buffer_size)
     r = json.loads(response)
     if not "SUCCESS" in r or not r["SUCCESS"]:
         print("Operation Failed.", r["MESSAGE"])
@@ -78,23 +75,37 @@ def main():
         znp.append(proof)
         encrypted_vote.append(crypto)
         hash.update(str(crypto))
+
     authorization_token = "Authorized Voter "+hash.hexdigest()
 
-    print("Blinding vote")
     blinded_vote = []
+    blinded_r = []
     for i,v in enumerate(encrypted_vote):
-        crypto = p.blind(blindKey, rsaKey,str(v))
-        blinded_vote.append(base64.b64encode(crypto))
-        print(str(i+1)+"/"+str(len(vote)))
+        rand = getRandomRange(1, rsaKey.key.n-1, randfunc=rsaKey._randfunc)
+        blinded_r.append(rand)
 
-    print("Blinding auth & ID")
-    blinded_auth = base64.b64encode(p.blind(blindKey, rsaKey,authorization_token))
-    encrypted_id = base64.b64encode(rsa.encrypt(voter_id, rsaKey))
+        blinded = rsaKey.key._blind(v, rand)
+        blinded_vote.append(base64.b64encode(str(blinded)))
 
-    message = json.dumps({"TYPE":"REGISTER", "VOTE":blinded_vote, "AUTHORIZATION":authorization_token, "VOTERID": encrypted_id})
+    auth_r = getRandomRange(1, rsaKey.key.n-1, randfunc=rsaKey._randfunc)
+
+    a = bytes_to_long(authorization_token)
+    # blinded = (a * pow(auth_r, rsaKeyPriv.e, rsaKeyPriv.n)) % rsaKeyPriv.n #blind
+    blinded = rsaKey.key._blind(a, auth_r)
+    # h = pow(blinded,rsaKeyPriv.d,rsaKeyPriv.n) #sign
+    # h = rsaKeyPriv.sign(blinded, 0)[0]
+    # i =  inverse(auth_r, rsaKey.n) * h % rsaKey.n #unblind
+    # i = rsaKey.key._unblind(h, auth_r)
+    # j = pow(i,rsaKey.e,rsaKey.n) #decrypt
+    # j = rsaKey.encrypt(i, 0)[0]
+
+    encrypted_id = rsaKey.encrypt(voter_id, 0)
+    print("Registering your vote")
+
+    message = json.dumps({"TYPE":"REGISTER", "VOTE":blinded_vote, "AUTHORIZATION":base64.b64encode(str(blinded)), "VOTERID": base64.b64encode(encrypted_id[0])})
 
     client.sendall(message+"\n")
-    response = client.recv(1024)
+    response = client.recv(buffer_size)
     r = json.loads(response)
     if not "SUCCESS" in r or not r["SUCCESS"]:
         print("Operation Failed.", r["MESSAGE"])
@@ -102,25 +113,28 @@ def main():
 
     signed_blinded_vote = r["VOTE"]
     signed_vote = []
-    print("Unblind votes")
-    for v in signed_blinded_vote:
-        v2 = p.unblind(blindKey, rsaKey,base64.b64decode(v))
-        signed_vote.append(v2)
-        print(len(signed_vote),":",rsa.decrypt(vs,rsaKey))
+    for i in xrange(len(signed_blinded_vote)):
+        v = long(base64.b64decode(signed_blinded_vote[i]))
+        rand = blinded_r[i]
 
-    print("Unblind auth")
-    signed_blinded_auth = base64.b64decode(r["AUTH"])
-    signed_auth= p.unblind(blindKey, rsaKey,signed_blinded_auth)
-    print("auth:",rsa.decrypt(signed_auth,rsaKey))
+        unblinded = rsaKey.key._unblind(v, rand)
+        signed_vote.append(unblinded)
 
-    print("Encrypt auth for bb")
-    encrypted_auth = base64.b64encode(rsa.encrypt(signed_auth,rsaKeyBB))
-    print("Encrypt votes for bb")
-    encrypted_vote = []
 
-    for v in signed_vote:
-        v2 = rsa.encrypt(v,rsaKeyBB)
-        encrypted_vote.append(base64.b64encode(v2))
+    signed_blinded_auth = long(base64.b64decode(r["AUTH"]))
+    signed_auth = rsaKey.key._unblind(signed_blinded_auth, auth_r)
+    print("Submitting your vote")
+
+    message = json.dumps({"TYPE":"VOTE", "VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
+
+    client.sendall(message+"\n")
+    response = client.recv(buffer_size)
+    r = json.loads(response)
+    if not "SUCCESS" in r or not r["SUCCESS"]:
+        print("Operation Failed.", r["MESSAGE"])
+        return
+    else:
+        print("Successful vote")
 
 if __name__ == "__main__":
     main()
