@@ -140,6 +140,9 @@ class BB:
                 if not p.inModN(x,n) or not p.inModNStar(s,n) or not p.inModN(e,n):
                     return json.dumps({"MESSAGE":"Invalid ZNP (inModN)", "SUCCESS":False})
 
+                if not e == p.hash(x,s) % n:
+                    return json.dumps({"MESSAGE":"Invalid ZNP (e)", "SUCCESS":False})
+
                 if not u == (pow(g, x, n_sq) * pow(s, n, n_sq)) % n_sq:
                     return json.dumps({"MESSAGE":"Invalid ZNP (u)", "SUCCESS":False})
 
