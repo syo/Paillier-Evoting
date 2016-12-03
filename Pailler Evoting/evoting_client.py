@@ -69,13 +69,16 @@ def main():
     encrypted_vote = []
     hash = hashlib.sha224()
     znp = []
+    znp_set = []
     print("Encrypting vote")
     for i,v in enumerate(vote):
         print(str(i+1)+"/"+str(len(vote)))
         # crypto = rsa.encrypt(v, key1)
         crypto,r = p.encryptFactors(paillierKey, v)
         proof = p.genZKP(paillierKey, v, crypto, r)
+        proof_set = p.genZKPset(paillierKey, v, crypto, r)
         znp.append(proof)
+        znp_set.append(proof_set)
         encrypted_vote.append(crypto)
         hash.update(str(crypto))
 
@@ -133,7 +136,7 @@ def main():
     signed_auth = rsaKey.key._unblind(signed_blinded_auth, auth_r)
     print("Submitting your vote")
 
-    message = json.dumps({"TYPE":"VOTE", "ZNP":znp,"VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
+    message = json.dumps({"TYPE":"VOTE", "ZNP":znp,"ZNPSET":znp_set,"VOTE":signed_vote, "AUTHORIZATION":base64.b64encode(str(signed_auth))})
 
     client.sendall(message+"\n")
     response = client.recv(buffer_size)
